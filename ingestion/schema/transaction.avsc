@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "BankTransaction",
+  "namespace": "com.banking.risk",
+  "fields": [
+    {"name": "transaction_id", "type": "string"},
+    {"name": "account_id", "type": "string"},
+    {"name": "amount", "type": "double"},
+    {"name": "currency", "type": "string"},
+    {"name": "transaction_type", "type": "string"},
+    {"name": "merchant_category", "type": "string"},
+    {"name": "location", "type": "string"},
+    {"name": "timestamp", "type": "long"},
+    {"name": "is_international", "type": "boolean"}
+  ]
+}

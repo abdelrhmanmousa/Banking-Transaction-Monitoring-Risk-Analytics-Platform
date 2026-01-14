@@ -1,0 +1,164 @@
+version: '3.8'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  broker:
+    image: confluentinc/cp-kafka:7.5.1
+    container_name: broker
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092:9092
+    env_file: ./kafka/kafka.env
+    environment:
+      # These are best kept here for clarity of networking
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.1
+    container_name: schema-registry
+    depends_on:
+      - broker
+    ports:
+      - 8081:8081
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+
+  # --- STORAGE LAYER (HDFS) ---
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    ports: [9870:9870, 9000:9000]
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=hadoop-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000  
+    env_file: ./hadoop/hadoop.env  
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    depends_on: [namenode]
+    env_file: ./hadoop/hadoop.env
+    ports: [9864:9864]
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    environment:
+      - SERVICE_PRECONDITION=namenode:9000
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000  
+
+  # --- PROCESSING LAYER (SPARK) ---
+  spark-master:
+    image: bde2020/spark-master:3.0.0-hadoop3.2
+    container_name: spark-master
+    hostname: spark-master
+    ports: [8080:8080, 7077:7077]
+    env_file: ./hadoop/hadoop.env
+    volumes:
+      # Mount the XML configs so Spark knows the cluster map
+      - ./configs/core-site.xml:/opt/spark/conf/core-site.xml
+      - ./configs/hive-site.xml:/opt/spark/conf/hive-site.xml
+      - ./configs/hbase-site.xml:/opt/spark/conf/hbase-site.xml
+      - ../processing/streaming/processor.py:/opt/spark/processing/streaming/processor.py
+    environment:
+      - HBASE_CONF_DIR=/opt/spark/conf
+      - SPARK_CONF_DIR=/opt/spark/conf
+
+  spark-worker:
+    image: bde2020/spark-worker:3.0.0-hadoop3.2
+    container_name: spark-worker
+    
+    depends_on: [spark-master]
+    env_file: ./hadoop/hadoop.env
+    volumes:
+      - ./configs/core-site.xml:/opt/spark/conf/core-site.xml
+      - ./configs/hive-site.xml:/opt/spark/conf/hive-site.xml
+      - ./configs/hbase-site.xml:/opt/spark/conf/hbase-site.xml
+    environment:
+      - "SPARK_MASTER=spark://spark-master:7077"
+      - SPARK_LOCAL_IP=spark-worker
+      - HBASE_CONF_DIR=/opt/spark/conf
+      - SPARK_CONF_DIR=/opt/spark/conf
+    command: /bin/bash /worker.sh spark://spark-master:7077
+
+  # --- REAL-TIME DATABASE (HBASE) ---
+  hbase-master:
+    image: harisekhon/hbase:latest
+    container_name: hbase-master
+    hostname: hbase-master
+    depends_on: [zookeeper, namenode]
+    ports: [16010:16010]
+    command: master
+    env_file: ./hbase/hbase.env
+    volumes:
+      - ./configs/hbase-site.xml:/hbase/conf/hbase-site.xml
+      - ./configs/core-site.xml:/hbase/conf/core-site.xml
+
+    environment:
+      - HBASE_CONFIG_hbase_zookeeper_quorum=zookeeper
+
+  hbase-regionserver:
+    image: harisekhon/hbase:latest
+    container_name: hbase-rs
+    hostname: hbase-rs
+    depends_on: [hbase-master]
+    command: regionserver
+    env_file: ./hbase/hbase.env
+    volumes:
+      - ./configs/hbase-site.xml:/hbase/conf/hbase-site.xml
+      - ./configs/core-site.xml:/hbase/conf/core-site.xml
+    environment:
+      - HBASE_CONFIG_hbase_zookeeper_quorum=zookeeper
+
+  # Thirft server for hbase access (from spark)
+  hbase-thrift:
+    image: harisekhon/hbase:latest
+    container_name: hbase-thrift
+    hostname: hbase-thrift
+    depends_on: [hbase-master]
+    command: thrift
+    ports:
+      - "9090:9090"
+    env_file: ./hbase/hbase.env
+    volumes:
+      - ./configs/hbase-site.xml:/hbase/conf/hbase-site.xml
+      - ./configs/core-site.xml:/hbase/conf/core-site.xml
+    environment:
+      - HBASE_CONFIG_hbase_zookeeper_quorum=zookeeper
+    
+
+  # --- DATA WAREHOUSE (HIVE) ---
+  hive-metastore-postgresql:
+    image: bde2020/hive-metastore-postgresql:2.3.0
+    container_name: hive-metastore-db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    depends_on: [namenode, hive-metastore-postgresql]
+    env_file: [./hadoop/hadoop.env, ./hadoop/hive.env]
+    command: /opt/hive/bin/hive --service metastore
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    depends_on: [hive-metastore]
+    env_file: [./hadoop/hadoop.env, ./hadoop/hive.env]
+    ports: [10000:10000]
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+  db_data:    
