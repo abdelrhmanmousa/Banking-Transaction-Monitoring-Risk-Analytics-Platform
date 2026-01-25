@@ -17,9 +17,24 @@ services:
     env_file: ./kafka/kafka.env
     environment:
       # These are best kept here for clarity of networking
+      KAFKA_BROKER_ID: 1
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+  broker-2:
+    image: confluentinc/cp-kafka:7.5.1
+    container_name: broker-2
+    depends_on:
+      - zookeeper
+    ports:
+      - 9093:9092
+    env_file: ./kafka/kafka.env
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker-2:29093,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT    
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.5.1
@@ -86,6 +101,8 @@ services:
       - ./configs/hbase-site.xml:/opt/spark/conf/hbase-site.xml
     environment:
       - "SPARK_MASTER=spark://spark-master:7077"
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=3
       - SPARK_LOCAL_IP=spark-worker
       - HBASE_CONF_DIR=/opt/spark/conf
       - SPARK_CONF_DIR=/opt/spark/conf
@@ -150,6 +167,7 @@ services:
     depends_on: [namenode, hive-metastore-postgresql]
     env_file: [./hadoop/hadoop.env, ./hadoop/hive.env]
     command: /opt/hive/bin/hive --service metastore
+    ports: [9083:9083]
 
   hive-server:
     image: bde2020/hive:2.3.2-postgresql-metastore
@@ -157,6 +175,73 @@ services:
     depends_on: [hive-metastore]
     env_file: [./hadoop/hadoop.env, ./hadoop/hive.env]
     ports: [10000:10000]
+
+  # # Impala service for interactive SQL queries
+  # # --- Apply this to ALL THREE Impala services ---
+  # impala-statestore:
+  #   image: yarivgraf/apache-impala-3.4.0:latest
+  #   container_name: impala-statestore
+  #   command: statestored
+  #   environment:
+  #     - JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+  #     # We combine BOTH paths here
+  #     - LD_LIBRARY_PATH=/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server:/opt/impala/lib
+  #   restart: always
+
+  # impala-catalog:
+  #   image: yarivgraf/apache-impala-3.4.0:latest
+  #   container_name: impala-catalog
+  #   command: catalogd
+  #   depends_on:
+  #     - impala-statestore
+  #     - hive-metastore
+  #   environment:
+  #     - STATE_STORE_HOST=impala-statestore
+  #     - HIVE_METASTORE_URIS=thrift://hive-metastore:9083 # <--- ADD THIS
+
+  #     - JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+  #     - LD_LIBRARY_PATH=/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server:/opt/impala/lib
+  #   volumes:
+  #     - ./configs/hive-site.xml:/etc/impala/conf/hive-site.xml
+  #     - ./configs/core-site.xml:/etc/impala/conf/core-site.xml
+  #     - ./configs/hdfs-site.xml:/etc/impala/conf/hdfs-site.xml
+
+  # impala-server:
+  #   image: yarivgraf/apache-impala-3.4.0:latest
+  #   container_name: impala-server
+  #   command: >
+  #     impalad 
+  #     -state_store_host=impala-statestore 
+  #     -catalog_service_host=impala-catalog
+  #     -mem_limit=2g
+  #   depends_on:
+  #     - impala-catalog
+  #   ports:
+  #     - "21050:21050"
+  #   environment:
+  #     - JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+  #     - LD_LIBRARY_PATH=/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server:/opt/impala/lib
+  #   volumes:
+  #     - ./configs/hive-site.xml:/etc/impala/conf/hive-site.xml
+  #     - ./configs/core-site.xml:/etc/impala/conf/core-site.xml
+  #     - ./configs/hdfs-site.xml:/etc/impala/conf/hdfs-site.xml
+
+
+  # airflow service for orchestration
+  # --- ORCHESTRATION (AIRFLOW) ---
+  airflow:
+    image: apache/airflow:2.7.1-python3.9
+    container_name: airflow
+    user: "${AIRFLOW_UID:-1000}:0"
+    volumes:
+      - ../orchestration/dags:/opt/airflow/dags # Where you put your DAG scripts
+    ports:
+      - "8085:8080" # Airflow UI on 8085
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+    command: standalone
+
 
 volumes:
   hadoop_namenode:
