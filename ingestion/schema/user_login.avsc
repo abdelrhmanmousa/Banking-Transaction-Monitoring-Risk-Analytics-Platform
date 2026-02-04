@@ -1,0 +1,11 @@
+{
+  "type": "record", "name": "UserLogin", "namespace": "com.banking.risk",
+  "fields": [
+    {"name": "account_id", "type": "string"},
+    {"name": "login_id", "type": "string"},
+    {"name": "ip_address", "type": "string"},
+    {"name": "location", "type": "string"},
+    {"name": "device_type", "type": "string"},
+    {"name": "timestamp", "type": "long"}
+  ]
+}
