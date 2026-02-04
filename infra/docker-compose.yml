@@ -28,7 +28,7 @@ services:
     depends_on:
       - zookeeper
     ports:
-      - 9093:9092
+      - 9093:9093
     env_file: ./kafka/kafka.env
     environment:
       KAFKA_BROKER_ID: 2
@@ -84,7 +84,8 @@ services:
       - ./configs/core-site.xml:/opt/spark/conf/core-site.xml
       - ./configs/hive-site.xml:/opt/spark/conf/hive-site.xml
       - ./configs/hbase-site.xml:/opt/spark/conf/hbase-site.xml
-      - ../processing/streaming/processor.py:/opt/spark/processing/streaming/processor.py
+      - ../processing/spark-streaming:/opt/spark/processing/spark-streaming
+
     environment:
       - HBASE_CONF_DIR=/opt/spark/conf
       - SPARK_CONF_DIR=/opt/spark/conf
@@ -99,6 +100,7 @@ services:
       - ./configs/core-site.xml:/opt/spark/conf/core-site.xml
       - ./configs/hive-site.xml:/opt/spark/conf/hive-site.xml
       - ./configs/hbase-site.xml:/opt/spark/conf/hbase-site.xml
+      - ../processing/spark-streaming:/opt/spark/processing/spark-streaming
     environment:
       - "SPARK_MASTER=spark://spark-master:7077"
       - SPARK_WORKER_MEMORY=2g
