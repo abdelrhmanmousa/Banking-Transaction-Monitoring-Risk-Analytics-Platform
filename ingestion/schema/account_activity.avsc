@@ -1,0 +1,10 @@
+{
+  "type": "record", "name": "AccountActivity", "namespace": "com.banking.risk",
+  "fields": [
+    {"name": "account_id", "type": "string"},
+    {"name": "activity_type", "type": "string"},
+    {"name": "old_value", "type": "string"},
+    {"name": "new_value", "type": "string"},
+    {"name": "timestamp", "type": "long"}
+  ]
+}
