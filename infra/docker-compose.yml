@@ -74,7 +74,10 @@ services:
 
   # --- PROCESSING LAYER (SPARK) ---
   spark-master:
-    image: bde2020/spark-master:3.0.0-hadoop3.2
+    build:
+        context: ./spark
+        dockerfile: Dockerfile.spark-master
+    image: banking-spark-master:3.0.0-hadoop3.2
     container_name: spark-master
     hostname: spark-master
     ports: [8080:8080, 7077:7077]
@@ -84,14 +87,17 @@ services:
       - ./configs/core-site.xml:/opt/spark/conf/core-site.xml
       - ./configs/hive-site.xml:/opt/spark/conf/hive-site.xml
       - ./configs/hbase-site.xml:/opt/spark/conf/hbase-site.xml
-      - ../processing/spark-streaming:/opt/spark/processing/spark-streaming
+      - ../processing:/opt/spark/processing
 
     environment:
       - HBASE_CONF_DIR=/opt/spark/conf
       - SPARK_CONF_DIR=/opt/spark/conf
 
   spark-worker:
-    image: bde2020/spark-worker:3.0.0-hadoop3.2
+    build:
+        context: ./spark
+        dockerfile: Dockerfile.spark-worker
+    image: banking-spark-worker:3.0.0-hadoop3.2
     container_name: spark-worker
     
     depends_on: [spark-master]
@@ -100,7 +106,7 @@ services:
       - ./configs/core-site.xml:/opt/spark/conf/core-site.xml
       - ./configs/hive-site.xml:/opt/spark/conf/hive-site.xml
       - ./configs/hbase-site.xml:/opt/spark/conf/hbase-site.xml
-      - ../processing/spark-streaming:/opt/spark/processing/spark-streaming
+      - ../processing:/opt/spark/processing
     environment:
       - "SPARK_MASTER=spark://spark-master:7077"
       - SPARK_WORKER_MEMORY=2g
@@ -228,24 +234,49 @@ services:
   #     - ./configs/core-site.xml:/etc/impala/conf/core-site.xml
   #     - ./configs/hdfs-site.xml:/etc/impala/conf/hdfs-site.xml
 
+#-------------------------------------------------------------------------------------------------------------------
 
-  # airflow service for orchestration
+# --- METADATA & ORCHESTRATION LAYER (AIRFLOW) ---
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+ 
   # --- ORCHESTRATION (AIRFLOW) ---
   airflow:
-    image: apache/airflow:2.7.1-python3.9
-    container_name: airflow
-    user: "${AIRFLOW_UID:-1000}:0"
-    volumes:
-      - ../orchestration/dags:/opt/airflow/dags # Where you put your DAG scripts
-    ports:
-      - "8085:8080" # Airflow UI on 8085
-    environment:
-      - AIRFLOW__CORE__LOAD_EXAMPLES=False
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
-    command: standalone
+     build : ../orchestration/airflow
+     container_name: airflow
+     user: "${AIRFLOW_UID:-1000}:0"
+     volumes:
+        - ../orchestration/airflow/dags:/opt/airflow/dags
+        - ../orchestration/airflow/logs:/opt/airflow/logs
+        - ../orchestration/airflow/plugins:/opt/airflow/plugins
+        - ../processing/batch:/opt/airflow/batch
+     ports:
+        - "8085:8080"
+     depends_on:
+         postgres:
+           condition: service_healthy
+     environment:
+        - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+        - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+        - AIRFLOW__CORE__LOAD_EXAMPLES=False     
+        - AIRFLOW_CONN_HDFS_DEFAULT=hdfs://root@namenode:9000
+        - AIRFLOW_CONN_WEBHDFS_DEFAULT=webhdfs://root@namenode:9870
+        - AIRFLOW_CONN_HIVE_DEFAULT=hive2://hive-server:10000
+     command: standalone
 
 
 volumes:
   hadoop_namenode:
   hadoop_datanode:
-  db_data:    
+  db_data:
+  postgres-db-volume:    
