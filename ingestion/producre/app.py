@@ -14,7 +14,7 @@ tx_serializer = get_serializer("transaction.avsc")
 login_serializer = get_serializer("user_login.avsc")
 activity_serializer = get_serializer("account_activity.avsc")
 
-# 2) Producer base config (2 brokers for HA)
+# 2) Producer base config (2 brokers for HA) high ava
 base_conf = {
     'bootstrap.servers': 'localhost:9092,localhost:9093',
 

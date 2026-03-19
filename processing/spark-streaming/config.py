@@ -58,3 +58,6 @@ class AppConfig:
     HBASE_PORT: int = 9090
     HBASE_TABLE: str = "banking_risk"
     HBASE_HOST: str = "hbase-thrift"
+--------------------------------------------------------------------------------
+
+class Customer ( )

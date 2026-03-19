@@ -15,6 +15,8 @@ def read_kafka(spark: SparkSession, bootstrap: str, topic: str,
         .option("kafka.bootstrap.servers", bootstrap)
         .option("subscribe", topic)
         .option("startingOffsets", starting_offsets)
+        .option("failOnDataLoss", "false")  # to prevent stream from crashing if offsets are out of range
+       # .option("kafka.auto.offset.reset", "latest") # to handle the case when offsets are out of range
     )
     if max_offsets_per_trigger and max_offsets_per_trigger > 0:
         r = r.option("maxOffsetsPerTrigger", str(max_offsets_per_trigger))
@@ -100,7 +102,7 @@ def create_spark(app_name: str, shuffle_partitions: int) -> SparkSession:
 
 
 def add_event_time(df: DataFrame) -> DataFrame:
-    # timestamp is ms epoch in your schemas
+    # timestamp is ms epoch in schemas
     return df.withColumn("event_time", (col("timestamp") / 1000).cast("timestamp"))
 
 

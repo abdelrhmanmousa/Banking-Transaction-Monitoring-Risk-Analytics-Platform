@@ -13,30 +13,43 @@
 * ** Infrastructure: Docker & Docker Compose
 ## 🏗️ Architecture & Data Flow
 
-1. Ingestion (Real-Time)
-A Python producer generates mock banking transactions/account activity and pushes them to a Kafka topic (account_activity).
-A continuous Spark Structured Streaming job consumes these messages.
-Data is written to the Bronze Layer in HDFS as Parquet files, automatically partitioned by Date and Hour (dt=YYYY-MM-DD/hr=HH). Checkpointing is used to ensure exactly-once semantics and handle job restarts safely (failOnDataLoss=false).
-2. Orchestration & Compaction (Batch)
+### 1. Ingestion (Real-Time)
+- A Python producer generates mock banking transactions/account activity and pushes them to a Kafka topic (account_activity).
+- A continuous Spark Structured Streaming job consumes these messages.
+- Data is written to the Bronze Layer in HDFS as Parquet files, automatically partitioned by Date and Hour (dt=YYYY-MM-DD/hr=HH). Checkpointing is used to ensure - - -  exactly-once semantics and handle job restarts safely (failOnDataLoss=false).
+### 2. Orchestration & Compaction (Batch)
 Because streaming jobs create hundreds of tiny files (the "small file problem" in Hadoop), Apache Airflow runs an hourly DAG (banking_data_lake_maintenance) to optimize the storage:
-Sensor (sense_bronze_data): A WebHdfsSensor intelligently waits for the previous hour to finish writing data to HDFS.
-Compaction (compact_to_silver): A SparkSubmitOperator triggers compactor.py. It reads the hundreds of small Parquet files from the Bronze layer and merges them (coalesce(1)) into a single, high-performance file in the Silver Layer.
-Metadata Sync (repair_bronze_metadata): A BashOperator utilizes spark-sql to run MSCK REPAIR TABLE, keeping the Hive Metastore partitions in sync with the physical HDFS directories.
+- Sensor (sense_bronze_data): A WebHdfsSensor intelligently waits for the previous hour to finish writing data to HDFS.
+- Compaction (compact_to_silver): A SparkSubmitOperator triggers compactor.py. It reads the hundreds of small Parquet files from the Bronze layer and merges them -  -   (coalesce(n)) into a single, high-performance file in the Silver Layer.
+- Metadata Sync (repair_bronze_metadata): A BashOperator utilizes spark-sql to run MSCK REPAIR TABLE, keeping the Hive Metastore partitions in sync with the physical HDFS directories.
 
 ## 🚀 Project Structure
 
 ```
-📦 banking-data-lake
- ┣ 📂 dags
- ┃ ┗ 📜 bank_rist_orchestration.py   # Airflow DAG definition
- ┣ 📂 batch
- ┃ ┗ 📜 compactor.py                 # PySpark batch job (Bronze -> Silver)
- ┣ 📂 spark-streaming
- ┃ ┗ 📜 processor.py                 # Spark Structured Streaming job (Kafka -> Bronze)
- ┣ 📜 docker-compose.yml             # Infrastructure definitions (Spark, Hadoop, Airflow, Kafka)
- ┣ 📜 Dockerfile                     # Custom Airflow image (includes Java & procps for Spark)
- ┗ 📜 requirements.txt               # Python dependencies
-
+📦 BANKING-TRANSACTION-MONITORING
+ ┣ 📂 infra                         # Infrastructure as Code
+ ┃ ┣ 📂 configs                     # Container configurations
+ ┃ ┣ 📂 hadoop / hbase / kafka / spark # Service-specific setups
+ ┃ ┣ 📜 .env                        # Environment variables
+ ┃ ┗ 📜 docker-compose.yml          # Main cluster deployment file
+ ┣ 📂 ingestion                     # Data Generation & Schemas
+ ┃ ┣ 📂 producre                    # Python scripts generating Kafka events
+ ┃ ┗ 📂 schema                      # Avro schemas (account_activity, transaction, etc.)
+ ┣ 📂 orchestration                 # Workflow Management
+ ┃ ┗ 📂 airflow
+ ┃   ┣ 📂 dags
+ ┃   ┃ ┗ 📜 bank_rist_orchestration.py # The main DAG
+ ┃   ┣ 📜 Dockerfile                # Custom Airflow image (Java & procps included)
+ ┃   ┗ 📜 requirements.txt          # Airflow Python dependencies
+ ┗ 📂 processing                    # Data Transformation (Spark)
+   ┣ 📂 batch
+   ┃ ┗ 📜 compactor.py              # PySpark job: Bronze -> Silver compaction
+   ┗ 📂 spark-streaming
+     ┣ 📜 config.py                 # Streaming configurations
+     ┣ 📜 processor.py              # Main Structured Streaming entrypoint
+     ┣ 📜 schema_registry_client.py # Avro deserialization logic
+     ┣ 📜 sinks.py                  # HDFS write logic & checkpointing
+     ┗ 📜 streams.py                # Kafka read logic
  ```
 
 ## ⚙️ Setup & Installation
