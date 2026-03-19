@@ -1,8 +1,8 @@
 # 🏦 Banking Data Lake & Real-Time Streaming Pipeline
 
 ## 📖 Overview
-    This project implements a robust, end-to-end Data Lake for a banking/financial institution using the Medallion Architecture (Bronze ➔ Silver). It is fully containerized using Docker and is designed to handle both real-time streaming ingestion and scheduled hourly batch processing.
-    The pipeline ingests raw banking transactions, stores them in a highly available HDFS cluster, compacts the data for analytical querying, and automatically registers metadata in a Hive Metastore.
+* This project implements a robust, end-to-end Data Lake for a banking/financial institution using the Medallion Architecture (Bronze ➔ Silver). It is fully containerized using Docker and is designed to handle both real-time streaming ingestion and scheduled hourly batch processing.
+* The pipeline ingests raw banking transactions, stores them in a highly available HDFS cluster, compacts the data for analytical querying, and automatically registers metadata in a Hive Metastore.
 ## 🛠️ Tech Stack
 *  Message Broker: Apache Kafka (with Schema Registry)
 *  Stream Processing: Apache Spark Structured Streaming
