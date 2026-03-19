@@ -13,6 +13,9 @@
 *  Infrastructure: Docker & Docker Compose
 ## 🏗️ Architecture & Data Flow
 
+### our Arch
+![Architecture Diagram](Arch/arch.jpg) 
+
 ### 1. Ingestion (Real-Time)
 - A Python producer generates mock banking transactions/account activity and pushes them to a Kafka topic (account_activity).
 - A continuous Spark Structured Streaming job consumes these messages.
